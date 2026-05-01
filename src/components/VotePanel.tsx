@@ -9,8 +9,6 @@ import { cn } from '@/lib/utils'
 import { castVote } from '@/lib/actions/vote'
 import type { RestaurantOption, Vote } from '@/types'
 
-type SessionStatus = string
-
 interface OptionWithVotes extends RestaurantOption {
   votes: Vote[]
   _count: { votes: number }
@@ -19,36 +17,49 @@ interface OptionWithVotes extends RestaurantOption {
 interface VotePanelProps {
   options: OptionWithVotes[]
   sessionId: string
-  sessionStatus: SessionStatus
+  sessionStatus: string
   currentUserId: string
 }
 
-type OptimisticVoteState = { optionId: string; userId: string; action: 'add' | 'remove' }
+type OptimisticAction =
+  | { type: 'vote';   optionId: string; prevOptionId: string | null } // vote (and optionally remove prev)
+  | { type: 'unvote'; optionId: string }                              // toggle off
+
+interface VoteState {
+  counts: Record<string, number>
+  // Only ONE optionId can be in here at a time — enforced by the reducer
+  myVotedOptionId: string | null
+}
 
 export function VotePanel({ options, sessionId, sessionStatus, currentUserId }: VotePanelProps) {
   const [isPending, startTransition] = useTransition()
 
-  const initialVoteCounts = Object.fromEntries(options.map((o) => [o.id, o._count.votes]))
-  const initialUserVotes = new Set(
-    options.filter((o) => o.votes.some((v) => v.userId === currentUserId)).map((o) => o.id)
-  )
+  const myVotedOption = options.find((o) => o.votes.some((v) => v.userId === currentUserId))
 
-  const [optimisticState, addOptimistic] = useOptimistic<
-    { counts: Record<string, number>; userVotes: Set<string> },
-    OptimisticVoteState
-  >(
-    { counts: initialVoteCounts, userVotes: initialUserVotes },
+  const initialState: VoteState = {
+    counts: Object.fromEntries(options.map((o) => [o.id, o._count.votes])),
+    myVotedOptionId: myVotedOption?.id ?? null,
+  }
+
+  const [optimisticState, addOptimistic] = useOptimistic<VoteState, OptimisticAction>(
+    initialState,
     (state, action) => {
       const newCounts = { ...state.counts }
-      const newVotes = new Set(state.userVotes)
-      if (action.action === 'add') {
-        newCounts[action.optionId] = (newCounts[action.optionId] ?? 0) + 1
-        newVotes.add(action.optionId)
-      } else {
+
+      if (action.type === 'unvote') {
+        // Remove vote from current option
         newCounts[action.optionId] = Math.max(0, (newCounts[action.optionId] ?? 0) - 1)
-        newVotes.delete(action.optionId)
+        return { counts: newCounts, myVotedOptionId: null }
       }
-      return { counts: newCounts, userVotes: newVotes }
+
+      // action.type === 'vote'
+      // Remove count from previous option if switching
+      if (action.prevOptionId) {
+        newCounts[action.prevOptionId] = Math.max(0, (newCounts[action.prevOptionId] ?? 0) - 1)
+      }
+      // Add count to new option
+      newCounts[action.optionId] = (newCounts[action.optionId] ?? 0) + 1
+      return { counts: newCounts, myVotedOptionId: action.optionId }
     }
   )
 
@@ -61,10 +72,21 @@ export function VotePanel({ options, sessionId, sessionStatus, currentUserId }: 
 
   function handleVote(optionId: string) {
     if (!canVote || isPending) return
-    const hasVoted = optimisticState.userVotes.has(optionId)
+
+    const isCurrentVote = optimisticState.myVotedOptionId === optionId
 
     startTransition(async () => {
-      addOptimistic({ optionId, userId: currentUserId, action: hasVoted ? 'remove' : 'add' })
+      // Optimistic update — instantly reflect in UI before server responds
+      if (isCurrentVote) {
+        addOptimistic({ type: 'unvote', optionId })
+      } else {
+        addOptimistic({
+          type: 'vote',
+          optionId,
+          prevOptionId: optimisticState.myVotedOptionId,
+        })
+      }
+
       const result = await castVote(optionId, sessionId)
       if (!result.success) {
         toast.error(result.error)
@@ -74,10 +96,17 @@ export function VotePanel({ options, sessionId, sessionStatus, currentUserId }: 
 
   return (
     <div className="space-y-3">
+      {optimisticState.myVotedOptionId && (
+        <p className="text-xs text-orange-600 font-medium flex items-center gap-1.5">
+          <ThumbsUp className="h-3 w-3" />
+          You voted — click another option to switch, or click your vote to remove it.
+        </p>
+      )}
+
       {sortedOptions.map((option, index) => {
         const count = optimisticState.counts[option.id] ?? 0
         const percentage = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0
-        const hasVoted = optimisticState.userVotes.has(option.id)
+        const hasVoted = optimisticState.myVotedOptionId === option.id
         const isLeading = index === 0 && count > 0
 
         return (
