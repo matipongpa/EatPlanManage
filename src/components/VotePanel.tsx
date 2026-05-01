@@ -91,11 +91,12 @@ export function VotePanel({ options, sessionId, sessionStatus, currentUserId }: 
 
       const result = await castVote(optionId, sessionId)
 
+      // Unlock buttons immediately — don't wait for page revalidation
+      setLoadingOptionId(null)
+
       if (!result.success) {
         toast.error(result.error)
       }
-
-      setLoadingOptionId(null)
     })
   }
 
@@ -149,7 +150,7 @@ export function VotePanel({ options, sessionId, sessionStatus, currentUserId }: 
                   <Button
                     size="sm"
                     variant={hasVoted ? 'default' : 'outline'}
-                    disabled={isPending}
+                    disabled={loadingOptionId !== null}
                     onClick={() => handleVote(option.id)}
                     className={cn(
                       'h-8 gap-1.5 text-xs min-w-[72px]',
