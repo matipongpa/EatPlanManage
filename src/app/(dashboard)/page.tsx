@@ -3,17 +3,19 @@ import Link from "next/link";
 import { Plus, UtensilsCrossed, Compass } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { redis, dashboardMyKey, dashboardDiscoverKey, TTL } from "@/lib/redis";
 import { SessionCard } from "@/components/SessionCard";
 import { Button } from "@/components/ui/button";
+import type { SessionCardData } from "@/types";
 
 export const metadata: Metadata = { title: "Sessions" };
 
-export default async function DashboardPage() {
-  const session = await auth();
-  const userId = session!.user!.id!;
+async function getMySessionsData(userId: string): Promise<SessionCardData[]> {
+  const key = dashboardMyKey(userId)
+  const cached = await redis.get<SessionCardData[]>(key)
+  if (cached) return cached
 
-  // Sessions the user is part of
-  const mySessions = await db.mealSession.findMany({
+  const data = await db.mealSession.findMany({
     where: {
       OR: [{ ownerId: userId }, { members: { some: { userId } } }],
     },
@@ -23,10 +25,18 @@ export default async function DashboardPage() {
       options: { select: { _count: { select: { votes: true } } } },
     },
     orderBy: { createdAt: "desc" },
-  });
+  })
 
-  // Sessions the user has NOT joined yet — so friends can discover them
-  const discoverSessions = await db.mealSession.findMany({
+  await redis.setex(key, TTL.DASHBOARD, data)
+  return data as unknown as SessionCardData[]
+}
+
+async function getDiscoverSessionsData(userId: string): Promise<SessionCardData[]> {
+  const key = dashboardDiscoverKey(userId)
+  const cached = await redis.get<SessionCardData[]>(key)
+  if (cached) return cached
+
+  const data = await db.mealSession.findMany({
     where: {
       AND: [
         { ownerId: { not: userId } },
@@ -41,7 +51,20 @@ export default async function DashboardPage() {
     },
     orderBy: { createdAt: "desc" },
     take: 10,
-  });
+  })
+
+  await redis.setex(key, TTL.DASHBOARD, data)
+  return data as unknown as SessionCardData[]
+}
+
+export default async function DashboardPage() {
+  const session = await auth();
+  const userId = session!.user!.id!;
+
+  const [mySessions, discoverSessions] = await Promise.all([
+    getMySessionsData(userId),
+    getDiscoverSessionsData(userId),
+  ])
 
   const active = mySessions.filter((s) => s.status === "VOTING");
   const closed = mySessions.filter((s) => s.status === "CLOSED");

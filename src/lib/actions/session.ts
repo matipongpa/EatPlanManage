@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { redis, sessionKey } from '@/lib/redis'
+import { redis, sessionKey, dashboardMyKey, dashboardDiscoverKey } from '@/lib/redis'
 import type { ActionResult } from '@/types'
 import { notifySessionCreated, notifyVotingClosed } from './notification'
 
@@ -55,6 +55,8 @@ export async function createSession(
 
   await notifySessionCreated(mealSession.id, session.user.id)
 
+  // Invalidate dashboard cache for the creator so the new session appears immediately
+  await redis.del(dashboardMyKey(session.user.id))
   revalidatePath('/')
   return { success: true, data: { id: mealSession.id } }
 }
@@ -70,9 +72,14 @@ export async function joinSession(sessionId: string): Promise<ActionResult> {
 
   await db.sessionMember.create({ data: { sessionId, userId: session.user.id } })
 
-  // New member joined — invalidate so member list refreshes
-  await redis.del(sessionKey(sessionId))
+  // Joining moves session from discover → my sessions on dashboard
+  await redis.del(
+    sessionKey(sessionId),
+    dashboardMyKey(session.user.id),
+    dashboardDiscoverKey(session.user.id),
+  )
   revalidatePath(`/sessions/${sessionId}`)
+  revalidatePath('/')
   return { success: true, data: undefined }
 }
 
@@ -88,8 +95,16 @@ export async function closeVoting(sessionId: string): Promise<ActionResult> {
   await db.mealSession.update({ where: { id: sessionId }, data: { status: 'CLOSED' } })
   await notifyVotingClosed(sessionId, session.user.id)
 
-  // Status changed — invalidate cache
-  await redis.del(sessionKey(sessionId))
+  // Status changed — invalidate session detail + all member dashboards
+  const members = await db.sessionMember.findMany({
+    where: { sessionId },
+    select: { userId: true },
+  })
+  const memberDashboardKeys = members.flatMap((m) => [
+    dashboardMyKey(m.userId),
+    dashboardDiscoverKey(m.userId),
+  ])
+  await redis.del(sessionKey(sessionId), ...memberDashboardKeys)
   revalidatePath(`/sessions/${sessionId}`)
   revalidatePath('/')
   return { success: true, data: undefined }

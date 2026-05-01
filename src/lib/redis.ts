@@ -2,8 +2,9 @@ import { Redis } from '@upstash/redis'
 
 // Cache TTL constants (seconds)
 export const TTL = {
-  SESSION: 30,
-  NOTIFICATIONS: 60,
+  SESSION: 30,       // session detail — short so votes feel live
+  DASHBOARD: 15,     // dashboard list — very short, invalidated on any change
+  NOTIFICATIONS: 60, // notifications — less critical to be instant
 } as const
 
 export function sessionKey(sessionId: string): string {
@@ -12,6 +13,14 @@ export function sessionKey(sessionId: string): string {
 
 export function notificationsKey(userId: string): string {
   return `notifications:${userId}`
+}
+
+export function dashboardMyKey(userId: string): string {
+  return `dashboard:mine:${userId}`
+}
+
+export function dashboardDiscoverKey(userId: string): string {
+  return `dashboard:discover:${userId}`
 }
 
 // Redis is optional — if env vars are missing (local dev without Redis),

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { redis, sessionKey } from '@/lib/redis'
+import { redis, sessionKey, dashboardMyKey, dashboardDiscoverKey } from '@/lib/redis'
 import type { ActionResult } from '@/types'
 import { notifyAppointmentSet } from './notification'
 
@@ -43,8 +43,16 @@ export async function setAppointment(
 
   await notifyAppointmentSet(sessionId, session.user.id)
 
-  // Appointment set — invalidate so page shows confirmed state immediately
-  await redis.del(sessionKey(sessionId))
+  // Appointment confirmed — invalidate session + all member dashboards
+  const members = await db.sessionMember.findMany({
+    where: { sessionId },
+    select: { userId: true },
+  })
+  const memberDashboardKeys = members.flatMap((m) => [
+    dashboardMyKey(m.userId),
+    dashboardDiscoverKey(m.userId),
+  ])
+  await redis.del(sessionKey(sessionId), ...memberDashboardKeys)
   revalidatePath(`/sessions/${sessionId}`)
   revalidatePath('/')
   return { success: true, data: undefined }
