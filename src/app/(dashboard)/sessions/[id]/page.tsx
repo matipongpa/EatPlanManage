@@ -11,6 +11,7 @@ import { VotePanel } from '@/components/VotePanel'
 import { AppointmentForm } from '@/components/AppointmentForm'
 import { CloseVotingButton } from '@/components/CloseVotingButton'
 import { JoinSessionButton } from '@/components/JoinSessionButton'
+import { ShareButton } from '@/components/ShareButton'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -90,10 +91,13 @@ export default async function SessionDetailPage({ params }: PageProps) {
             </span>
           </div>
         </div>
-        {isOwner && mealSession.status === 'VOTING' && (
-          <CloseVotingButton sessionId={mealSession.id} />
-        )}
-        {!isMember && <JoinSessionButton sessionId={mealSession.id} />}
+        <div className="flex items-center gap-2 shrink-0">
+          <ShareButton sessionId={mealSession.id} />
+          {isOwner && mealSession.status === 'VOTING' && (
+            <CloseVotingButton sessionId={mealSession.id} />
+          )}
+          {!isMember && <JoinSessionButton sessionId={mealSession.id} />}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
