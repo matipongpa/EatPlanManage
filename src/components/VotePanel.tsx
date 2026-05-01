@@ -1,7 +1,7 @@
 'use client'
 
-import { useOptimistic, useTransition } from 'react'
-import { MapPin, ThumbsUp } from 'lucide-react'
+import { useOptimistic, useTransition, useState } from 'react'
+import { MapPin, ThumbsUp, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -33,6 +33,7 @@ interface VoteState {
 
 export function VotePanel({ options, sessionId, sessionStatus, currentUserId }: VotePanelProps) {
   const [isPending, startTransition] = useTransition()
+  const [loadingOptionId, setLoadingOptionId] = useState<string | null>(null)
 
   const myVotedOption = options.find((o) => o.votes.some((v) => v.userId === currentUserId))
 
@@ -75,8 +76,9 @@ export function VotePanel({ options, sessionId, sessionStatus, currentUserId }: 
 
     const isCurrentVote = optimisticState.myVotedOptionId === optionId
 
+    setLoadingOptionId(optionId)
+
     startTransition(async () => {
-      // Optimistic update — instantly reflect in UI before server responds
       if (isCurrentVote) {
         addOptimistic({ type: 'unvote', optionId })
       } else {
@@ -88,9 +90,12 @@ export function VotePanel({ options, sessionId, sessionStatus, currentUserId }: 
       }
 
       const result = await castVote(optionId, sessionId)
+
       if (!result.success) {
         toast.error(result.error)
       }
+
+      setLoadingOptionId(null)
     })
   }
 
@@ -108,6 +113,7 @@ export function VotePanel({ options, sessionId, sessionStatus, currentUserId }: 
         const percentage = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0
         const hasVoted = optimisticState.myVotedOptionId === option.id
         const isLeading = index === 0 && count > 0
+        const isLoading = loadingOptionId === option.id
 
         return (
           <div
@@ -146,14 +152,23 @@ export function VotePanel({ options, sessionId, sessionStatus, currentUserId }: 
                     disabled={isPending}
                     onClick={() => handleVote(option.id)}
                     className={cn(
-                      'h-8 gap-1.5 text-xs',
+                      'h-8 gap-1.5 text-xs min-w-[72px]',
                       hasVoted
                         ? 'bg-orange-500 hover:bg-orange-600 text-white border-transparent'
                         : 'hover:border-orange-300 hover:text-orange-600'
                     )}
                   >
-                    <ThumbsUp className="h-3.5 w-3.5" />
-                    {hasVoted ? 'Voted' : 'Vote'}
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <ThumbsUp className="h-3.5 w-3.5" />
+                        {hasVoted ? 'Voted' : 'Vote'}
+                      </>
+                    )}
                   </Button>
                 )}
               </div>
