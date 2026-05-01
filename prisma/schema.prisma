@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String?
+  email         String         @unique
+  password      String?
+  image         String?
+  createdAt     DateTime       @default(now())
+  sessions      SessionMember[]
+  ownedSessions MealSession[]
+  votes         Vote[]
+  notifications Notification[]
+  accounts      Account[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model MealSession {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  status      SessionStatus   @default(VOTING)
+  ownerId     String
+  owner       User            @relation(fields: [ownerId], references: [id])
+  members     SessionMember[]
+  options     RestaurantOption[]
+  appointment Appointment?
+  createdAt   DateTime        @default(now())
+  closingAt   DateTime?
+}
+
+enum SessionStatus {
+  VOTING
+  CLOSED
+  CONFIRMED
+}
+
+model SessionMember {
+  id        String      @id @default(cuid())
+  sessionId String
+  userId    String
+  session   MealSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id])
+
+  @@unique([sessionId, userId])
+}
+
+model RestaurantOption {
+  id        String      @id @default(cuid())
+  sessionId String
+  name      String
+  address   String?
+  imageUrl  String?
+  session   MealSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  votes     Vote[]
+}
+
+model Vote {
+  id        String           @id @default(cuid())
+  userId    String
+  optionId  String
+  user      User             @relation(fields: [userId], references: [id])
+  option    RestaurantOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@unique([userId, optionId])
+}
+
+model Appointment {
+  id             String      @id @default(cuid())
+  sessionId      String      @unique
+  session        MealSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  restaurantName String
+  address        String?
+  scheduledAt    DateTime
+  notes          String?
+  createdAt      DateTime    @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  type      NotificationType
+  sessionId String?
+  createdAt DateTime @default(now())
+}
+
+enum NotificationType {
+  SESSION_CREATED
+  VOTING_CLOSED
+  APPOINTMENT_SET
+}
