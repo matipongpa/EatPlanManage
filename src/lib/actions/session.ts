@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { redis, sessionKey } from '@/lib/redis'
 import type { ActionResult } from '@/types'
 import { notifySessionCreated, notifyVotingClosed } from './notification'
 
@@ -68,6 +69,9 @@ export async function joinSession(sessionId: string): Promise<ActionResult> {
   if (existing) return { success: false, error: 'Already a member' }
 
   await db.sessionMember.create({ data: { sessionId, userId: session.user.id } })
+
+  // New member joined — invalidate so member list refreshes
+  await redis.del(sessionKey(sessionId))
   revalidatePath(`/sessions/${sessionId}`)
   return { success: true, data: undefined }
 }
@@ -84,6 +88,8 @@ export async function closeVoting(sessionId: string): Promise<ActionResult> {
   await db.mealSession.update({ where: { id: sessionId }, data: { status: 'CLOSED' } })
   await notifyVotingClosed(sessionId, session.user.id)
 
+  // Status changed — invalidate cache
+  await redis.del(sessionKey(sessionId))
   revalidatePath(`/sessions/${sessionId}`)
   revalidatePath('/')
   return { success: true, data: undefined }
@@ -98,6 +104,9 @@ export async function deleteSession(sessionId: string): Promise<void> {
   if (mealSession.ownerId !== session.user.id) throw new Error('Forbidden')
 
   await db.mealSession.delete({ where: { id: sessionId } })
+
+  // Remove cache entry for deleted session
+  await redis.del(sessionKey(sessionId))
   revalidatePath('/')
   redirect('/')
 }

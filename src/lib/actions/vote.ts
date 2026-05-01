@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { redis, sessionKey } from '@/lib/redis'
 import type { ActionResult } from '@/types'
 
 export async function castVote(
@@ -27,11 +28,13 @@ export async function castVote(
 
   if (existingVote) {
     await db.vote.delete({ where: { id: existingVote.id } })
-    revalidatePath(`/sessions/${sessionId}`)
-    return { success: true, data: { voted: false } }
+  } else {
+    await db.vote.create({ data: { userId: session.user.id, optionId } })
   }
 
-  await db.vote.create({ data: { userId: session.user.id, optionId } })
+  // Invalidate Redis cache so next load fetches fresh vote counts from Postgres
+  await redis.del(sessionKey(sessionId))
   revalidatePath(`/sessions/${sessionId}`)
-  return { success: true, data: { voted: true } }
+
+  return { success: true, data: { voted: !existingVote } }
 }
