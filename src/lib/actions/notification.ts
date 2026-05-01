@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { redis, notificationsKey } from '@/lib/redis'
 import type { ActionResult } from '@/types'
 
 async function getMemberIds(sessionId: string, excludeUserId: string): Promise<string[]> {
@@ -11,6 +12,13 @@ async function getMemberIds(sessionId: string, excludeUserId: string): Promise<s
     select: { userId: true },
   })
   return members.map((m) => m.userId)
+}
+
+// Invalidate notification cache for a list of users so they see new notifications immediately
+async function invalidateNotificationCaches(userIds: string[]): Promise<void> {
+  if (userIds.length === 0) return
+  const keys = userIds.map(notificationsKey)
+  await redis.del(...keys)
 }
 
 export async function notifySessionCreated(sessionId: string, creatorId: string): Promise<void> {
@@ -32,6 +40,8 @@ export async function notifySessionCreated(sessionId: string, creatorId: string)
       sessionId,
     })),
   })
+
+  await invalidateNotificationCaches(memberIds)
 }
 
 export async function notifyVotingClosed(sessionId: string, ownerId: string): Promise<void> {
@@ -53,6 +63,8 @@ export async function notifyVotingClosed(sessionId: string, ownerId: string): Pr
       sessionId,
     })),
   })
+
+  await invalidateNotificationCaches(memberIds)
 }
 
 export async function notifyAppointmentSet(sessionId: string, ownerId: string): Promise<void> {
@@ -82,6 +94,8 @@ export async function notifyAppointmentSet(sessionId: string, ownerId: string): 
       sessionId,
     })),
   })
+
+  await invalidateNotificationCaches(memberIds)
 }
 
 export async function markAllRead(): Promise<ActionResult> {
@@ -93,6 +107,8 @@ export async function markAllRead(): Promise<ActionResult> {
     data: { read: true },
   })
 
+  // Invalidate so the bell count resets immediately
+  await redis.del(notificationsKey(session.user.id))
   revalidatePath('/')
   return { success: true, data: undefined }
 }
@@ -106,6 +122,7 @@ export async function markOneRead(notificationId: string): Promise<ActionResult>
     data: { read: true },
   })
 
+  await redis.del(notificationsKey(session.user.id))
   revalidatePath('/')
   return { success: true, data: undefined }
 }

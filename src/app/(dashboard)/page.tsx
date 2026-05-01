@@ -1,16 +1,16 @@
-import type { Metadata } from 'next'
-import Link from 'next/link'
-import { Plus, UtensilsCrossed, Compass } from 'lucide-react'
-import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
-import { SessionCard } from '@/components/SessionCard'
-import { Button } from '@/components/ui/button'
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Plus, UtensilsCrossed, Compass } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { SessionCard } from "@/components/SessionCard";
+import { Button } from "@/components/ui/button";
 
-export const metadata: Metadata = { title: 'Sessions' }
+export const metadata: Metadata = { title: "Sessions" };
 
 export default async function DashboardPage() {
-  const session = await auth()
-  const userId = session!.user!.id!
+  const session = await auth();
+  const userId = session!.user!.id!;
 
   // Sessions the user is part of
   const mySessions = await db.mealSession.findMany({
@@ -22,8 +22,8 @@ export default async function DashboardPage() {
       _count: { select: { members: true, options: true } },
       options: { select: { _count: { select: { votes: true } } } },
     },
-    orderBy: { createdAt: 'desc' },
-  })
+    orderBy: { createdAt: "desc" },
+  });
 
   // Sessions the user has NOT joined yet — so friends can discover them
   const discoverSessions = await db.mealSession.findMany({
@@ -31,7 +31,7 @@ export default async function DashboardPage() {
       AND: [
         { ownerId: { not: userId } },
         { members: { none: { userId } } },
-        { status: 'VOTING' },
+        { status: "VOTING" },
       ],
     },
     include: {
@@ -39,13 +39,13 @@ export default async function DashboardPage() {
       _count: { select: { members: true, options: true } },
       options: { select: { _count: { select: { votes: true } } } },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
     take: 10,
-  })
+  });
 
-  const active = mySessions.filter((s) => s.status === 'VOTING')
-  const closed = mySessions.filter((s) => s.status === 'CLOSED')
-  const confirmed = mySessions.filter((s) => s.status === 'CONFIRMED')
+  const active = mySessions.filter((s) => s.status === "VOTING");
+  const closed = mySessions.filter((s) => s.status === "CLOSED");
+  const confirmed = mySessions.filter((s) => s.status === "CONFIRMED");
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -54,11 +54,14 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-bold text-foreground">My Sessions</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {mySessions.length === 0
-              ? 'Create your first session to get started'
-              : `${mySessions.length} session${mySessions.length !== 1 ? 's' : ''} total`}
+              ? "Create your first session to get started"
+              : `${mySessions.length} session${mySessions.length !== 1 ? "s" : ""} total`}
           </p>
         </div>
-        <Button asChild className="bg-orange-500 hover:bg-orange-600 text-white gap-1.5">
+        <Button
+          asChild
+          className="bg-orange-500 hover:bg-orange-600 text-white gap-1.5"
+        >
           <Link href="/sessions/new">
             <Plus className="h-4 w-4" />
             New Session
@@ -75,7 +78,10 @@ export default async function DashboardPage() {
           <p className="mt-2 text-sm text-muted-foreground max-w-xs mx-auto">
             Create a session, add restaurant options, and let your group vote!
           </p>
-          <Button asChild className="mt-6 bg-orange-500 hover:bg-orange-600 text-white gap-1.5">
+          <Button
+            asChild
+            className="mt-6 bg-orange-500 hover:bg-orange-600 text-white gap-1.5"
+          >
             <Link href="/sessions/new">
               <Plus className="h-4 w-4" />
               Create First Session
@@ -152,5 +158,5 @@ export default async function DashboardPage() {
         </section>
       )}
     </div>
-  )
+  );
 }

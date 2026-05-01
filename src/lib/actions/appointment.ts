@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { redis, sessionKey } from '@/lib/redis'
 import type { ActionResult } from '@/types'
 import { notifyAppointmentSet } from './notification'
 
@@ -42,6 +43,8 @@ export async function setAppointment(
 
   await notifyAppointmentSet(sessionId, session.user.id)
 
+  // Appointment set — invalidate so page shows confirmed state immediately
+  await redis.del(sessionKey(sessionId))
   revalidatePath(`/sessions/${sessionId}`)
   revalidatePath('/')
   return { success: true, data: undefined }
