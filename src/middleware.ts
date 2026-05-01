@@ -6,18 +6,23 @@ export default auth((req) => {
   const { pathname } = req.nextUrl
 
   const isAuthPage = pathname.startsWith('/login') || pathname.startsWith('/register')
-  const isApiAuth = pathname.startsWith('/api/auth')
+  const isApiRoute = pathname.startsWith('/api/')
+  const isStatic = pathname.startsWith('/_next') || pathname === '/favicon.ico'
 
-  if (isApiAuth) return NextResponse.next()
+  // Never touch API or static routes
+  if (isApiRoute || isStatic) return NextResponse.next()
 
   if (!isLoggedIn && !isAuthPage) {
-    const loginUrl = new URL('/login', req.url)
+    // Use NEXTAUTH_URL env var to build absolute redirect — avoids localhost loop on Vercel
+    const baseUrl = process.env.NEXTAUTH_URL ?? req.nextUrl.origin
+    const loginUrl = new URL('/login', baseUrl)
     loginUrl.searchParams.set('callbackUrl', pathname)
     return NextResponse.redirect(loginUrl)
   }
 
   if (isLoggedIn && isAuthPage) {
-    return NextResponse.redirect(new URL('/', req.url))
+    const baseUrl = process.env.NEXTAUTH_URL ?? req.nextUrl.origin
+    return NextResponse.redirect(new URL('/', baseUrl))
   }
 
   return NextResponse.next()
