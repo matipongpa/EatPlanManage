@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { UtensilsCrossed, Plus, LogOut, User } from 'lucide-react'
 import { auth, signOut } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { redis, notificationsKey, TTL } from '@/lib/redis'
 import { NotificationBell } from '@/components/NotificationBell'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -20,11 +21,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await auth()
   if (!session?.user?.id) redirect('/login')
 
-  const notifications = await db.notification.findMany({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: 'desc' },
-    take: 20,
-  })
+  // Notifications are cached in Redis — avoids a Postgres hit on every page navigation
+  const notifKey = notificationsKey(session.user.id)
+  let notifications = await redis.get<Awaited<ReturnType<typeof db.notification.findMany>>>(notifKey)
+  if (!notifications) {
+    notifications = await db.notification.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    })
+    await redis.setex(notifKey, TTL.NOTIFICATIONS, notifications)
+  }
 
   return (
     <div className="min-h-screen bg-gray-50/50">

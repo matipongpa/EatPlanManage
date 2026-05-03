@@ -25,6 +25,15 @@ const createSessionSchema = z.object({
     .max(10),
 })
 
+// When a new session is created, every user's discover cache is stale
+// because they could all potentially see the new session in "Open to Join"
+async function invalidateAllDiscoverCaches(): Promise<void> {
+  const allUsers = await db.user.findMany({ select: { id: true } })
+  if (allUsers.length === 0) return
+  const keys = allUsers.map((u) => dashboardDiscoverKey(u.id))
+  await redis.del(...keys)
+}
+
 export async function createSession(
   formData: z.infer<typeof createSessionSchema>
 ): Promise<ActionResult<{ id: string }>> {
@@ -55,8 +64,13 @@ export async function createSession(
 
   await notifySessionCreated(mealSession.id, session.user.id)
 
-  // Invalidate dashboard cache for the creator so the new session appears immediately
-  await redis.del(dashboardMyKey(session.user.id))
+  // Clear creator's "my sessions" + every user's "discover" cache
+  // so the new session appears immediately for everyone
+  await Promise.all([
+    redis.del(dashboardMyKey(session.user.id)),
+    invalidateAllDiscoverCaches(),
+  ])
+
   revalidatePath('/')
   return { success: true, data: { id: mealSession.id } }
 }
