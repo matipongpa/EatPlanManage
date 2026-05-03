@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { UtensilsCrossed, Plus, LogOut, User } from 'lucide-react'
+import { UtensilsCrossed, Plus, LogOut, MessageCircle } from 'lucide-react'
 import { auth, signOut } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { redis, notificationsKey, TTL } from '@/lib/redis'
@@ -73,6 +73,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
                       <p className="text-xs leading-none text-muted-foreground">{session.user.email}</p>
                     </div>
                   </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/settings/line">
+                      <MessageCircle className="mr-2 h-4 w-4 text-[#06C755]" />
+                      Link LINE
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild className="sm:hidden">
                     <Link href="/sessions/new">
